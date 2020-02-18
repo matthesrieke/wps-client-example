@@ -44,7 +44,14 @@ public class Application {
 
     public static void main(String[] args) throws WPSClientException, IOException, XMLHandlingException, XmlException {
         Application app = new Application();
+
         app.executeWithInlineResponse();
+
+        /*
+         * as the inline response output processing of the client lib
+         * seems to have limitations (it does not produce real XML),
+         * execute by reference is a good alternative
+         */
         app.executeWithResponseByReference();
     }
 
@@ -81,12 +88,15 @@ public class Application {
 
         log.info("Result By Reference: {}", resultUrl);
 
-        CloseableHttpResponse referencedOutput = HttpClientBuilder.create().build().execute(new HttpGet(resultUrl.toString()));
-        String result = EntityUtils.toString(referencedOutput.getEntity());
-        log.info("Result Resolved: {}", result);
+        // resolve the reference with HttpClient
+        try (CloseableHttpResponse referencedOutput = HttpClientBuilder.create().build().execute(new HttpGet(resultUrl.toString()))) {
+            String result = EntityUtils.toString(referencedOutput.getEntity());
+            log.info("Result Resolved: {}", result);
 
-        FeatureCollectionDocument resultXml = FeatureCollectionDocument.Factory.parse(result);
-        log.info("Result Resolved and parsed: {}", XmlUtil.objectToString(resultXml, false, true));
+            FeatureCollectionDocument resultXml = FeatureCollectionDocument.Factory.parse(result);
+            log.info("Result Resolved and parsed: {}", XmlUtil.objectToString(resultXml, false, true));
+        }
+
     }
 
     private Result prepareAndExecute(XmlObject input, WPSClientSession session, Process processDescription) throws WPSClientException, IOException {
@@ -142,6 +152,9 @@ public class Application {
         CoordinatesType coords = ring.addNewCoordinates();
         coords.setStringValue("112.1484375,71.18775391813158 88.59374999999999,70.8446726342528 90,67.87554134672945 96.6796875,65.94647177615738 119.53125,68.9110048456202 112.1484375,71.18775391813158");
 
+        // these steps are required as the schema is an working with substitution groups,
+        // and the GML binding do not know all valid members for the groups. This is one
+        // of the major limitations of XMLBeans
         ext.addNewAbstractRing().set(ring);
         XmlUtil.qualifySubstitutionGroup(ext.getAbstractRing(), LinearRingDocument.type.getDocumentElementName());
 
